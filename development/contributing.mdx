@@ -1,0 +1,350 @@
+---
+title: Contributing
+description: Guidelines for contributing to the MTG Deck Builder project
+---
+
+Thank you for your interest in contributing to the MTG Deck Builder! This document provides guidelines and best practices for contributing to the project.
+
+## Getting started
+
+Before you begin contributing:
+
+1. **Set up your development environment** following the [setup guide](/development/setup)
+2. **Read the architecture documentation** to understand the codebase structure at [architecture](/development/architecture)
+3. **Check existing issues** to see if your idea or bug is already being addressed
+4. **Fork the repository** to your own GitHub account
+
+## How to contribute
+
+### Reporting bugs
+
+If you find a bug, please create an issue with:
+
+- **Clear title**: Brief description of the problem
+- **Steps to reproduce**: Detailed steps to recreate the issue
+- **Expected behavior**: What should happen
+- **Actual behavior**: What actually happens
+- **Environment**: OS, Node.js version, browser (if frontend issue)
+- **Screenshots**: If applicable
+
+Example:
+```
+Title: Probability calculation incorrect for multicolor cards
+
+Steps to reproduce:
+1. Create a deck with 4x Island, 4x Mountain, 4x Lightning Bolt
+2. Calculate probability for Lightning Bolt on turn 3
+3. Observe the result
+
+Expected: Should account for both red mana sources
+Actual: Only counts one color of mana
+
+Environment: Node 8.11, Chrome 90, macOS
+```
+
+### Suggesting features
+
+Feature requests are welcome! Please create an issue describing:
+
+- **Problem statement**: What problem does this feature solve?
+- **Proposed solution**: How would you implement it?
+- **Alternatives considered**: What other approaches did you think about?
+- **Impact**: Who benefits and how?
+
+### Submitting pull requests
+
+<Steps>
+  <Step title="Create a feature branch">
+    Create a branch from `main` with a descriptive name:
+    
+    ```bash
+    git checkout -b feature/probability-for-multicolor
+    git checkout -b fix/card-search-crash
+    git checkout -b refactor/deck-reducer
+    ```
+  </Step>
+
+  <Step title="Make your changes">
+    Write your code following the style guidelines below. Keep commits focused and atomic:
+    
+    ```bash
+    git add app/reducers/Deck.js
+    git commit -m "Fix card quantity validation in deck reducer"
+    ```
+  </Step>
+
+  <Step title="Test your changes">
+    Ensure your changes work as expected:
+    
+    - Test manually in the browser
+    - Verify database operations work correctly
+    - Check that existing functionality still works
+    - Test edge cases and error conditions
+  </Step>
+
+  <Step title="Push and create PR">
+    Push your branch and create a pull request:
+    
+    ```bash
+    git push origin feature/probability-for-multicolor
+    ```
+    
+    In your PR description, include:
+    - Summary of changes
+    - Related issue number (if applicable)
+    - Testing performed
+    - Screenshots (for UI changes)
+  </Step>
+</Steps>
+
+## Code style guidelines
+
+### General JavaScript
+
+- Use **ES6+ features** where appropriate (arrow functions, destructuring, etc.)
+- Use **2 spaces** for indentation
+- Use **single quotes** for strings (following existing codebase style)
+- Use **semicolons** consistently
+- Keep functions **small and focused** on a single responsibility
+
+### React components
+
+**Functional vs. class components**:
+- Use class components for containers that connect to Redux
+- Use functional components for presentational components when possible
+
+**Component structure**:
+```jsx
+import React from 'react'
+import { connect } from 'react-redux'
+
+// Component definition
+class MyComponent extends React.Component {
+  // Event handlers
+  handleClick = () => {
+    // ...
+  }
+
+  // Render
+  render() {
+    return (
+      <div>
+        {/* JSX */}
+      </div>
+    )
+  }
+}
+
+// Redux connection
+const mapStateToProps = (state) => ({
+  // ...
+})
+
+const mapDispatchToProps = (dispatch) => ({
+  // ...
+})
+
+export default connect(mapStateToProps, mapDispatchToProps)(MyComponent)
+```
+
+**Props and PropTypes**:
+- Consider adding PropTypes validation for components (currently not enforced)
+- Destructure props in render method for cleaner code
+
+### Redux patterns
+
+**Action creators**:
+```javascript
+// Synchronous action
+export const addCard = (card) => ({
+  type: 'ADD_CARD',
+  card
+})
+
+// Async action with thunk
+export const fetchCards = (filters) => {
+  return (dispatch) => {
+    dispatch({ type: 'FETCH_CARDS_REQUEST' })
+    return axios.get('/api/cards', { params: filters })
+      .then(res => dispatch({ type: 'FETCH_CARDS_SUCCESS', cards: res.data }))
+      .catch(err => dispatch({ type: 'FETCH_CARDS_FAILURE', error: err }))
+  }
+}
+```
+
+**Reducers**:
+- Keep reducers **pure** (no side effects)
+- Use **immutable updates** (spread operators, Array methods that return new arrays)
+- Handle all relevant action types
+- Always return state for unhandled actions
+
+```javascript
+const initialState = {
+  items: [],
+  loading: false,
+  error: null
+}
+
+export default (state = initialState, action) => {
+  switch (action.type) {
+    case 'FETCH_CARDS_REQUEST':
+      return { ...state, loading: true, error: null }
+    
+    case 'FETCH_CARDS_SUCCESS':
+      return { ...state, loading: false, items: action.cards }
+    
+    case 'FETCH_CARDS_FAILURE':
+      return { ...state, loading: false, error: action.error }
+    
+    default:
+      return state
+  }
+}
+```
+
+### Express routes
+
+**Route organization**:
+- Group related routes in separate files under `server/api/routes/`
+- Use Express Router for modular route definitions
+- Use descriptive route names and HTTP methods
+
+**Error handling**:
+```javascript
+router.get('/cards/:id', (req, res, next) => {
+  Card.findById(req.params.id)
+    .then(card => {
+      if (!card) {
+        const err = new Error('Card not found')
+        err.status = 404
+        throw err
+      }
+      res.json(card)
+    })
+    .catch(next)  // Pass errors to error handling middleware
+})
+```
+
+### Database queries
+
+**Sequelize best practices**:
+- Use `findOne`, `findAll`, `create`, `update`, `destroy` methods
+- Use `where` clauses for filtering
+- Use `include` for eager loading associations
+- Handle errors appropriately
+
+```javascript
+Card.findAll({
+  where: {
+    colors: { [Sequelize.Op.contains]: ['Blue'] },
+    cmc: { [Sequelize.Op.lte]: 3 }
+  },
+  limit: 20
+})
+```
+
+## Testing
+
+<Accordion title="Testing guidelines (tests not yet implemented)">
+  Currently, the project does not have a comprehensive test suite. This is a great area for contribution!
+  
+  **Areas that need testing**:
+  - Algorithm correctness (unit tests for `__alg/ArithmaticHelpers.js`)
+  - Redux reducers (pure functions, easy to test)
+  - API endpoints (integration tests)
+  - React components (snapshot and interaction tests)
+  
+  **Recommended testing libraries**:
+  - **Jest**: Test runner and assertion library
+  - **React Testing Library**: React component testing
+  - **Supertest**: Express API testing
+  
+  If you'd like to help add tests, please open an issue to discuss the testing strategy first.
+</Accordion>
+
+## Development workflow
+
+### Branch strategy
+
+- **`main`**: Stable, deployable code
+- **Feature branches**: `feature/description`
+- **Bug fix branches**: `fix/description`
+- **Refactoring branches**: `refactor/description`
+
+Merge feature branches into `main` via pull request after review.
+
+### Commit messages
+
+Write clear, concise commit messages:
+
+**Good**:
+```
+Add card filtering by color identity
+Fix probability calculation for turn 0
+Refactor deck reducer to use immutable updates
+```
+
+**Avoid**:
+```
+Updated stuff
+Fix bug
+WIP
+```
+
+### Code review
+
+All pull requests should be reviewed before merging:
+
+- **Check functionality**: Does it work as intended?
+- **Review code quality**: Is it readable and maintainable?
+- **Verify style**: Does it follow project conventions?
+- **Test edge cases**: What could break?
+- **Consider performance**: Are there efficiency concerns?
+
+## Areas that need improvement
+
+The project has several areas where contributions would be especially valuable:
+
+### High priority
+
+1. **Test suite**: Add comprehensive unit and integration tests
+2. **Error handling**: Improve error messages and user feedback
+3. **Input validation**: Add validation for user inputs (card quantities, deck size)
+4. **Algorithm optimization**: Profile and optimize probability calculations
+5. **Documentation**: Add JSDoc comments to complex functions
+
+### Medium priority
+
+6. **Card data source**: Implement automated card data import from MTG API
+7. **Deck export**: Add ability to export decks to common formats
+8. **Advanced filters**: More sophisticated card search and filtering
+9. **Multi-card probability**: Calculate probability of drawing multiple specific cards
+10. **Mobile responsiveness**: Improve UI for mobile devices
+
+### Nice to have
+
+11. **User accounts**: Save decks to user accounts
+12. **Deck statistics**: Show deck composition graphs and statistics
+13. **Card images**: Display card images from Scryfall or similar API
+14. **Probability visualization**: Charts showing probability over multiple turns
+15. **Deck recommendations**: Suggest cards based on deck composition
+
+## Questions and support
+
+If you have questions about contributing:
+
+- **Check the documentation**: [Setup](/development/setup) and [Architecture](/development/architecture) guides
+- **Open an issue**: For questions about implementation approach
+- **Join discussions**: Participate in existing issue discussions
+
+## License
+
+By contributing to this project, you agree that your contributions will be licensed under the same license as the project (ISC).
+
+## Recognition
+
+All contributors will be recognized in the project. Thank you for helping make the MTG Deck Builder better!
+
+---
+
+**Ready to contribute?** Pick an issue labeled `good first issue` or `help wanted` to get started!

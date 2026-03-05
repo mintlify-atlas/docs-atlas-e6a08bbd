@@ -1,0 +1,299 @@
+---
+title: Architecture
+description: Understand the system architecture and design patterns of the MTG Deck Builder
+---
+
+The MTG Deck Builder is a full-stack JavaScript application that calculates the probability of drawing specific cards from a Magic: The Gathering deck based on sophisticated combinatorial algorithms.
+
+## Technology stack
+
+The application is built with the following technologies:
+
+### Frontend
+- **React 16.2**: Component-based UI library
+- **Redux 3.7**: State management with thunk and logger middleware
+- **Material-UI 0.20**: Component library for UI elements
+- **React Router 4**: Client-side routing
+- **React Virtualized**: Efficient rendering of large card lists
+- **Axios**: HTTP client for API requests
+
+### Backend
+- **Express 4.16**: Web server framework
+- **Sequelize 4.22**: ORM for PostgreSQL
+- **PostgreSQL**: Relational database for card storage
+- **Morgan**: HTTP request logging
+- **Body Parser**: Request body parsing middleware
+
+### Build tools
+- **Webpack 3**: Module bundler
+- **Babel 6**: JavaScript transpiler (React, ES2015, Stage-2)
+- **Nodemon**: Auto-restart server during development
+
+## System architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Browser                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │                  React App                           │  │
+│  │  ┌────────────┐  ┌────────────┐  ┌──────────────┐  │  │
+│  │  │ Components │──│   Redux    │──│   Axios      │  │  │
+│  │  │  (Views)   │  │  (State)   │  │ (API Client) │  │  │
+│  │  └────────────┘  └────────────┘  └──────────────┘  │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ HTTP (Axios)
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Express Server (Port 4000)               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  API Routes                                          │  │
+│  │  ┌──────────────┐  ┌────────────────────────────┐  │  │
+│  │  │ /api/cards   │  │     /api/alg               │  │  │
+│  │  │ (Card CRUD)  │  │ (Probability Calculation)  │  │  │
+│  │  └──────────────┘  └────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Algorithm Module (__alg/)                          │  │
+│  │  - Multichoose combinations                         │  │
+│  │  - Hypergeometric distribution                      │  │
+│  │  - Large number arithmetic                          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Sequelize ORM                                       │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│              PostgreSQL Database (mtg)                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐             │
+│  │  cards   │  │   deck   │  │ cards_decks  │             │
+│  └──────────┘  └──────────┘  └──────────────┘             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Directory structure
+
+```
+mtg-deck-builder/
+├── __alg/                    # Algorithm module
+│   ├── ArithmaticHelpers.js  # Large number calculations
+│   └── README.md             # Algorithm documentation
+├── app/                      # Frontend React application
+│   ├── components/           # React components
+│   │   ├── DeckBuilderContainer.jsx  # Main container
+│   │   ├── DeckList.js              # Deck display
+│   │   └── ProbabilityCell.js       # Probability display
+│   ├── reducers/             # Redux reducers
+│   │   ├── index.js          # Root reducer
+│   │   ├── cards.js          # Card filtering
+│   │   ├── Deck.js           # Deck management
+│   │   └── selectedCard.js   # Card selection
+│   ├── main.jsx              # React entry point
+│   └── store.js              # Redux store configuration
+├── server/                   # Backend Express application
+│   ├── api/                  # API routes
+│   │   ├── index.js          # Route aggregator
+│   │   └── routes/
+│   │       ├── Alg.js        # Algorithm endpoints
+│   │       ├── Card.js       # Card CRUD endpoints
+│   │       └── mtg.js        # MTG-specific endpoints
+│   ├── db/                   # Database layer
+│   │   ├── models/
+│   │   │   └── index.js      # Sequelize models
+│   │   └── fixtures/         # Database seed data
+│   └── index.js              # Server entry point
+├── public/                   # Static assets
+│   ├── index.html            # HTML template
+│   ├── bundle.js             # Webpack output
+│   ├── stylesheets/          # CSS files
+│   └── Manapix/              # Mana symbol images
+├── webpack.config.js         # Webpack configuration
+└── package.json              # Dependencies and scripts
+```
+
+## Frontend architecture
+
+### Component hierarchy
+
+The React application follows a container/presentational component pattern:
+
+- **DeckBuilderContainer** (`app/components/DeckBuilderContainer.jsx`): Main container component that connects to Redux
+- **DeckList** (`app/components/DeckList.js`): Displays the current deck composition
+- **ProbabilityCell** (`app/components/ProbabilityCell.js`): Renders probability calculations for individual cards
+
+### Redux state management
+
+The Redux store is configured in `app/store.js:7` with the following middleware:
+
+- **redux-thunk**: Enables async action creators for API calls
+- **redux-logger**: Logs all actions and state changes in development
+
+The root reducer combines three slices of state:
+
+```javascript
+// app/reducers/index.js
+const rootReducer = combineReducers({
+    filteredCards,      // Card search and filtering
+    deckReducer,        // Current deck composition
+    selectedCardReducer // Currently selected card
+})
+```
+
+### Application entry point
+
+The app bootstraps in `app/main.jsx:9` by rendering the main component wrapped in providers:
+
+```jsx
+<MuiThemeProvider>
+  <Provider store={store}>
+    <DeckBuilder />
+  </Provider>
+</MuiThemeProvider>
+```
+
+This provides:
+- Material-UI theming context
+- Redux store access to all components
+
+## Backend architecture
+
+### Express server setup
+
+The server is configured in `server/index.js` with the following middleware stack:
+
+1. **Morgan**: HTTP request logging (`dev` format)
+2. **Static files**: Serves `public/` directory
+3. **Body parser**: Parses URL-encoded and JSON request bodies
+4. **API routes**: Mounted at `/api`
+5. **SPA fallback**: Serves `index.html` for all other routes
+6. **Error handler**: Catches and formats errors
+
+### API routes
+
+API routes are organized in `server/api/routes/`:
+
+- **`/api/cards`**: Card CRUD operations (search, filter, retrieve card data)
+- **`/api/alg`**: Probability calculation endpoints using the algorithm module
+
+Routes are aggregated in `server/api/index.js:6` and mounted on the Express app.
+
+### Database models
+
+Sequelize models are defined in `server/db/models/index.js`:
+
+#### Card model
+
+Stores MTG card data with fields:
+- Basic info: `name`, `type`, `text`, `flavor`
+- Mana: `manaCost`, `cmc` (converted mana cost), `colors`
+- Stats: `power`, `toughness`
+- Metadata: `set`, `multiverseid`, `mciNumber`
+- Deck building: `ProducibleManaColors`, `fetchOptions`
+
+#### Deck model
+
+Stores deck information:
+- `name`: Deck name
+
+#### cards_decks junction table
+
+Links cards to decks with quantity:
+- `cardId`: Reference to card
+- `quantity`: Number of copies in deck
+- Belongs to `Deck`
+
+## Algorithm module
+
+The `__alg/` directory contains the core probability calculation engine.
+
+### Multichoose algorithm
+
+The algorithm uses a multilayered multichoose approach to count valid hand combinations:
+
+1. **Layer 1**: Allocate cards into three bins:
+   - Target card bin (1 card minimum)
+   - Land bin (C cards, where C = converted mana cost)
+   - Other cards bin (remaining cards)
+
+2. **Layer 2**: Further break down the land bin by land types to account for color requirements
+
+3. Calculate all possible hand combinations that satisfy the constraints
+
+### Hypergeometric distribution
+
+Once valid hand combinations are counted, the algorithm applies the hypergeometric distribution PMF (probability mass function) to calculate the probability of drawing each combination.
+
+The formula accounts for:
+- Population size (deck size)
+- Number of success states (cards that satisfy conditions)
+- Number of draws (opening hand + draw steps)
+- Sample size (hand size)
+
+### Arithmetic helpers
+
+Large combinatorial numbers (like `60!`) exceed JavaScript's number precision. The `ArithmaticHelpers.js` module implements custom arithmetic functions to handle these calculations accurately.
+
+## Data flow
+
+Typical request flow for calculating card probabilities:
+
+1. **User action**: User builds a deck and selects a card to analyze
+2. **Redux dispatch**: Action creator dispatches async action
+3. **API call**: Axios sends POST request to `/api/alg` with deck and card data
+4. **Algorithm processing**: Server invokes multichoose algorithm with deck composition
+5. **Probability calculation**: Hypergeometric distribution computes probability
+6. **Response**: Server returns probability data as JSON
+7. **Redux update**: Reducer updates state with new probability data
+8. **Re-render**: React components re-render with updated probabilities
+
+## Design patterns
+
+### Separation of concerns
+
+- **Algorithm module** is isolated in `__alg/` and can be tested independently
+- **API routes** are modular and organized by domain
+- **Redux reducers** manage distinct slices of state
+- **Components** are separated into containers (logic) and presentational (UI)
+
+### Single-page application
+
+The server serves `index.html` for all non-API routes, allowing React Router to handle client-side routing without page reloads.
+
+### Middleware composition
+
+Both Express and Redux use middleware patterns for composable, reusable functionality:
+- Express: logging, parsing, static files, error handling
+- Redux: async actions (thunk), logging, DevTools
+
+## Performance considerations
+
+- **React Virtualized**: Efficiently renders large lists of cards without performance degradation
+- **Algorithm optimization**: Multichoose is O(m^n) but faster than Monte Carlo simulation
+- **Database indexing**: Critical for card search queries
+- **Source maps**: Enabled in development for debugging, should be disabled in production
+
+## Key files reference
+
+| File | Purpose | Key features |
+|------|---------|-------------|
+| `app/main.jsx:9` | React entry point | Renders app with Redux and Material-UI |
+| `app/store.js:7` | Redux store | Configured with thunk, logger, DevTools |
+| `server/index.js:30` | Server entry | Express setup, port 4000, DB sync |
+| `server/api/index.js` | API aggregator | Mounts card and algorithm routes |
+| `server/db/models/index.js:2` | Database models | Sequelize models and associations |
+| `__alg/ArithmaticHelpers.js` | Algorithm core | Probability calculations |
+| `webpack.config.js:8` | Build config | Bundles React app to public/bundle.js |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Development setup" icon="code" href="/development/setup">
+    Set up your local development environment
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Learn how to contribute to the project
+  </Card>
+</CardGroup>

@@ -1,0 +1,66 @@
+---
+title: Introduction
+description: "Learn about MTG Deck Builder and how it helps you construct optimal Magic decks using statistical analysis"
+---
+
+## What is MTG Deck Builder?
+
+MTG Deck Builder is a web application that helps Magic: The Gathering players construct decks with mathematically optimal mana bases. Using hypergeometric distribution, it calculates the probability of drawing the right mana sources at the right time, ensuring you can consistently cast your spells on curve.
+
+## The problem it solves
+
+One of the most challenging aspects of deck construction is determining how many mana sources you need for each color in your deck. Add too few, and you won't be able to cast your spells on time. Add too many, and you'll flood out with excess lands.
+
+MTG Deck Builder solves this by:
+
+- Calculating real-time probabilities for drawing specific cards across turns 1-8
+- Analyzing your entire deck's mana requirements
+- Helping you optimize your mana base based on statistical probability
+- Showing you exactly when you can expect to cast each card
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Real-time probability calculation" icon="calculator">
+    See the probability of drawing each card in your deck on turns 1 through 8 using hypergeometric distribution
+  </Card>
+  
+  <Card title="Interactive deck building" icon="cards">
+    Add, remove, and adjust card quantities with instant probability updates
+  </Card>
+  
+  <Card title="Card preview" icon="eye">
+    View full card images from the Gatherer database as you build your deck
+  </Card>
+  
+  <Card title="Mana base optimization" icon="chart-line">
+    Make data-driven decisions about how many lands and mana sources to include
+  </Card>
+</CardGroup>
+
+## Mathematical foundation
+
+MTG Deck Builder is based on the groundbreaking analysis by Hall of Fame player Frank Karsten. His article ["How Many Colored Mana Sources Do You Need to Consistently Cast Your Spells?"](https://www.channelfireball.com/articles/frank-analysis-how-many-colored-mana-sources-do-you-need-to-consistently-cast-your-spells/) provides the mathematical framework for optimal mana base construction.
+
+The application implements these principles through an interactive interface, making advanced statistical analysis accessible to all players.
+
+## What is hypergeometric distribution?
+
+Hypergeometric distribution is a probability distribution that describes the likelihood of drawing a specific number of success items from a finite population without replacement. 
+
+In Magic: The Gathering terms:
+
+- **Population**: Your 60-card deck
+- **Success items**: The specific cards you want to draw (e.g., red mana sources)
+- **Sample size**: The number of cards you've drawn (7 for opening hand, plus draws each turn)
+- **Probability**: The chance you'll have the mana sources you need by a given turn
+
+For example, if you have 20 red mana sources in your 60-card deck, hypergeometric distribution tells you the probability of drawing at least 2 red sources in your opening 7 cards, or by turn 3 when you've drawn 9 cards total.
+
+This mathematical approach gives you precise, actionable data to optimize your deck construction.
+
+## Next steps
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Get MTG Deck Builder running locally in under 5 minutes
+</Card>

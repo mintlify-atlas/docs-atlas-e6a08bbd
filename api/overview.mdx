@@ -1,0 +1,101 @@
+---
+title: API overview
+description: Learn how to interact with the MTG Deck Builder API to calculate probabilities and search for cards
+---
+
+The MTG Deck Builder API provides endpoints for calculating card draw probabilities and searching the Magic: The Gathering card database.
+
+## Base URL
+
+All API requests should be made to:
+
+```
+http://localhost:4000/api
+```
+
+## Available endpoints
+
+The API provides the following endpoints:
+
+### Probability calculation
+
+- **POST /api/alg** - Calculate the probability of being able to play a specific card given a deck composition and number of draws
+
+### Card search
+
+- **GET /api/cards/allcards** - Retrieve all card names and IDs
+- **GET /api/cards/filteredcards/:value** - Search for cards by name (returns first 10 matches)
+
+## Request format
+
+All POST requests should include a `Content-Type: application/json` header and a JSON request body.
+
+```bash
+curl -X POST http://localhost:4000/api/alg \
+  -H "Content-Type: application/json" \
+  -d '{"draws": 10, "card": {...}, "deck": [...]}'
+```
+
+## Response format
+
+All responses are returned in JSON format. Successful requests return a `200` status code.
+
+```json
+0.847
+```
+
+For the probability endpoint, the response is a number between 0 and 1 representing the probability, or an empty string if the calculation cannot be performed.
+
+## Authentication
+
+The API does not require authentication. All endpoints are publicly accessible.
+
+## Error handling
+
+Errors are returned with appropriate HTTP status codes:
+
+- **400 Bad Request** - Invalid request parameters
+- **404 Not Found** - Endpoint not found
+- **500 Internal Server Error** - Server error during processing
+
+Error responses include a message describing the error:
+
+```json
+"Error message describing what went wrong"
+```
+
+## Rate limiting
+
+There are currently no rate limits on API requests.
+
+## Card object structure
+
+Many endpoints work with card objects. A typical card object includes:
+
+```json
+{
+  "name": "Lightning Bolt",
+  "manaCost": "{R}",
+  "type": "Instant",
+  "types": ["Instant"],
+  "text": "Lightning Bolt deals 3 damage to any target.",
+  "ProducibleManaColors": "false",
+  "fetchOptions": "",
+  "multiverseid": 397722,
+  "set": "M15",
+  "uniqueName": "lightningbolt"
+}
+```
+
+For land cards, the `ProducibleManaColors` field contains comma-separated color codes (e.g., `"R,G"` for a land that produces red or green mana).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Probability endpoint" icon="percent" href="/api/probability-endpoint">
+    Calculate draw probabilities
+  </Card>
+  <Card title="Algorithm explanation" icon="function" href="/algorithm/how-it-works">
+    Understand the math
+  </Card>
+</CardGroup>

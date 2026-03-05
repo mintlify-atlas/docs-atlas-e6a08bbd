@@ -1,0 +1,542 @@
+---
+title: How it works
+description: Deep dive into the probability calculation implementation
+---
+
+## Overview
+
+The MTG Deck Builder algorithm calculates the probability that you can cast a specific card by a certain turn, given your deck composition. It does this by:
+
+1. Determining if the deck can theoretically cast the card
+2. Parsing all possible "good hands" that can cast the card
+3. Calculating the probability of drawing each hand using hypergeometric distribution
+4. Summing probabilities across all viable hand combinations
+
+## Core function: `probabilityOfPlayingCard`
+
+### Function signature
+
+```javascript
+const probabilityOfPlayingCard = function (
+  cardsDrawn,      // Total cards drawn (e.g., 7 for opening hand)
+  card,            // The card object with manaCost and type
+  deck,            // Array of all cards in the deck
+  startingHandSize // Default 7, can be 6 after mulligan
+)
+```
+
+### Return value
+
+- Returns a **decimal probability** (0 to 1) representing the chance you can cast the card
+- Returns `''` (empty string) if the card is a land
+- Returns `0` if the deck cannot possibly cast the card
+- Returns `''` if you're drawing more cards than exist in the deck
+
+### High-level flow
+
+```javascript ArithmaticHelpers.js:32-141
+const probabilityOfPlayingCard = function (
+  cardsDrawn,
+  card,
+  deck,
+  startingHandSize = 7
+) {
+  if (card.type.includes('Land') || cardsDrawn > deck.length) return ''
+
+  // Parse the card's mana cost into an object
+  let C = cardCost(card)
+  
+  // Handle split mana symbols (e.g., {U/R})
+  Object.keys(C).forEach(v => {
+    if (isNaN(parseInt(v)) && v.length > 1) {
+      // Sterilize deck to treat dual lands as producing split mana
+      deck = deck.map(card => {
+        if (card.ProducibleManaColors) {
+          if (card.ProducibleManaColors.split('').reduce((a, b) => {
+            return a || v.includes(b)
+          }, false)) {
+            card.ProducibleManaColors += ',' + v
+          }
+        }
+        return card
+      })
+    }
+  })
+
+  if (cardPlayable(cardsDrawn, card, deck, startingHandSize)) {
+    // ... probability calculation
+  }
+  else return 0;
+}
+```
+
+<Note>
+  The algorithm first checks if casting the card is even possible before doing expensive probability calculations.
+</Note>
+
+## Step 1: Check if card is playable
+
+### `cardPlayable` function
+
+This boolean function determines if a deck has the resources to cast a card:
+
+```javascript ArithmaticHelpers.js:347-375
+function cardPlayable(draws, card, deck, startingHandSize = 7) {
+  deck = deck.copy();
+  let cost = cardCost(card);
+  let convertedManaCost = Object.keys(cost).reduce((a, b) => a + cost[b], 0);
+  let manaBase = JSONmanaBase(deck);
+  
+  // Check 1: Have you had enough turns to reach that mana?
+  let turnCondition = draws - startingHandSize >= convertedManaCost - 1;
+  
+  // Check 2: Do you have enough lands total?
+  let manaCondition =
+    Object.keys(manaBase).reduce((a, b) => a + manaBase[b], 0) >=
+    convertedManaCost;
+
+  // Check 3: Do you have the right colors?
+  delete cost.C  // Ignore colorless mana
+  let colorCondition = Object.keys(cost).reduce((a, b) => {
+    Object.keys(manaBase).forEach(v => {
+      if (v.split(',').includes(b)) {
+        let min = Math.min(manaBase[v], cost[b]);
+        cost[b] -= min;
+        manaBase[v] -= min;
+      }
+    });
+    return a && cost[b] <= 0;
+  }, true);
+  
+  // Check 4: Is the card in the deck?
+  let includesCondition = deck.map(v => v.name).includes(card.name);
+
+  return colorCondition && manaCondition && turnCondition && includesCondition;
+}
+```
+
+### Four conditions
+
+<AccordionGroup>
+  <Accordion title="Turn condition">
+    You get one land drop per turn (after turn 1). To cast a 4-mana spell, you need to be on turn 4.
+    
+    ```javascript
+    draws - startingHandSize >= convertedManaCost - 1
+    ```
+    
+    Example: To cast a 3-mana spell with 9 cards drawn (turn 3 on the play):
+    - `9 - 7 >= 3 - 1`
+    - `2 >= 2` ✓
+  </Accordion>
+
+  <Accordion title="Mana condition">
+    Your deck must have enough lands total to reach the converted mana cost.
+    
+    ```javascript
+    totalLandsInDeck >= convertedManaCost
+    ```
+    
+    Example: A 4-mana card requires at least 4 lands in your deck.
+  </Accordion>
+
+  <Accordion title="Color condition">
+    Your deck must have sufficient sources of each required color.
+    
+    ```javascript
+    // For each color in the card's cost:
+    // Check if enough lands produce that color
+    ```
+    
+    Example: `{2}{U}{U}` requires at least 2 blue sources in your deck.
+  </Accordion>
+
+  <Accordion title="Includes condition">
+    The card must actually be in the deck (you can't calculate the probability of drawing a card you don't own).
+    
+    ```javascript
+    deck.map(v => v.name).includes(card.name)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Step 2: Parse all viable hands
+
+### `parseHands` function
+
+This function generates every possible hand combination that can cast the card:
+
+```javascript ArithmaticHelpers.js:145-293
+function parseHands(numCards, card, deck) {
+  // Parse card's cost
+  let cost = cardCost(card);
+  let convertedManaCost = Object.keys(cost).reduce((a, b) => {
+    return (a += cost[b]);
+  }, 0);
+  let colorCost = convertedManaCost - (cost.C || 0);
+
+  // Bin the deck into: Other cards, Target card, Lands
+  let deckBins = deck.reduce(
+    (a, b) => {
+      if (b.type.includes('Land')) {
+        a.L++;
+      } else if (b.name === card.name) {
+        a.T++;
+      } else {
+        a.O++;
+      }
+      return a;
+    },
+    { O: 0, T: 0, L: 0 }
+  );
+  
+  // ... continue binning lands by color
+  let landBins = JSONmanaBase(deck);
+  
+  // Use multichoose to generate all color combinations
+  let necessaryManaOptions = Object.keys(cost).reduce(
+    (a, b) => {
+      let options = Object.keys(landBins).reduce((c, d) => {
+        if (d.split(',').includes(b)) {
+          c.push([0, landBins[d], d]);
+        }
+        return c;
+      }, []);
+
+      if (options.length) {
+        let color = [];
+        multichoose(cost[b], options, color);
+        return color.reduce((c, d) => {
+          return c.concat(a.map(v => v.concat(d)));
+        }, []);
+      } else return a;
+    },
+    [[]]
+  );
+  
+  // ... continues with colorless mana and other cards
+  
+  return viable;  // Array of all possible viable hands
+}
+```
+
+### What is a "hand" in this context?
+
+A hand is represented as an array of arrays: `[[drawn, available, type], ...]`
+
+Example hand that can cast `{2}{U}{U}`:
+```javascript
+[
+  [1, 4, 'T'],    // 1 copy of target card drawn (out of 4 in deck)
+  [0, 32, 'O'],   // 0 other cards drawn (32 available)
+  [2, 10, 'U'],   // 2 Islands drawn (10 in deck)
+  [4, 14, 'U,R']  // 4 dual lands drawn (14 in deck)
+]
+```
+
+<Warning>
+  The algorithm must account for dual lands being used for multiple color requirements, which significantly complicates the parsing logic (ArithmaticHelpers.js:216-239).
+</Warning>
+
+## Step 3: Calculate hypergeometric probability
+
+### `hypergeometric` function
+
+Once we have all viable hands, calculate the probability of drawing each:
+
+```javascript ArithmaticHelpers.js:404-423
+function hypergeometric(draws, cards, memo = {}) {
+  // draws: number of cards drawn
+  // cards: array of [drawn, available, type] tuples
+  // memo: memoization cache for nCk calculations
+  
+  draws = draws.toString();
+  let numerator = '1';
+  
+  for (var i = 0; i < cards.length; i++) {
+    // Calculate C(available, drawn) for each card type
+    if (!memo[cards[i][1].toString() + ',' + cards[i][0].toString()]) {
+      memo[cards[i][1].toString() + ',' + cards[i][0].toString()] = nCk(
+        cards[i][1],
+        cards[i][0]
+      );
+    }
+    numerator = multiplyString(
+      numerator,
+      memo[cards[i][1].toString() + ',' + cards[i][0].toString()]
+    );
+  }
+  return numerator;
+}
+```
+
+### Why not calculate the denominator?
+
+The numerator represents the number of ways to draw a specific hand combination. The denominator `C(deckSize, cardsDrawn)` is constant for all hands, so it's calculated once in the parent function (ArithmaticHelpers.js:59) and used to divide the sum of all numerators.
+
+### Memoization
+
+The `memo` object caches binomial coefficient calculations:
+
+```javascript
+memo['24,3'] = nCk(24, 3)  // C(24, 3) = 2,024
+```
+
+Since many hands share the same `nCk` calculations, memoization provides significant performance improvements.
+
+## Step 4: The multichoose algorithm
+
+### `multichoose` function
+
+This recursive function generates all combinations of placing `numBalls` balls into `bins` without exceeding bin capacity:
+
+```javascript ArithmaticHelpers.js:379-400
+function multichoose(numBalls, bins, combinations, com = bins.copy()) {
+  // Base case: no balls left to place
+  if (numBalls === 0) {
+    combinations.push(com.copy());
+  } else if (bins.length) {
+    // Try placing 0 to min(capacity, numBalls) balls in current bin
+    for (var i = 0; i <= Math.min(bins[0][1] - bins[0][0], numBalls); i++) {
+      // Update the current bin
+      if (i)
+        com[com.length - bins.length][0] = com[com.length - bins.length][0] + 1;
+
+      // Recurse with remaining balls and bins
+      multichoose(
+        numBalls - i,
+        bins.copy().slice(1),
+        combinations,
+        com.copy().slice(0)
+      );
+    }
+  }
+}
+```
+
+### Example: Multichoose in action
+
+```javascript
+// Need to draw 3 lands from bins:
+// [0, 10, 'U']  - 10 Islands available
+// [0, 8, 'R']   - 8 Mountains available
+
+let combinations = [];
+multichoose(3, [[0, 10, 'U'], [0, 8, 'R']], combinations);
+
+// Results:
+// [[3, 10, 'U'], [0, 8, 'R']]   - 3 Islands, 0 Mountains
+// [[2, 10, 'U'], [1, 8, 'R']]   - 2 Islands, 1 Mountain
+// [[1, 10, 'U'], [2, 8, 'R']]   - 1 Island, 2 Mountains
+// [[0, 10, 'U'], [3, 8, 'R']]   - 0 Islands, 3 Mountains
+```
+
+## Handling fetch lands
+
+Fetch lands add complexity because they can become any land type:
+
+### Vandermonde's identity
+
+The algorithm uses Vandermonde's identity to partition probability across all possible fetch land draws:
+
+```javascript ArithmaticHelpers.js:60-141
+let fetches = deck.filter(v => {
+  if (v.ProducibleManaColors) {
+    if (v.ProducibleManaColors.includes('F')) {
+      return manaToFetch(deck, v.fetchOptions).ProducibleManaColors
+        .split(',').reduce((a, b) => {
+          return a || C[b] > 0
+        }, false)
+    }
+  }
+  else return false
+})
+let others = deck.filter(v => !fetches.includes(v))
+
+for (var i = 0; i <= fetches.length; i++) {
+  // Calculate probability for drawing exactly i fetch lands
+  muliplier = nCk((fetches.length).toString(), (i).toString())
+  
+  // Adjust the card's cost for fetched mana
+  if (i > 0 && sudoCard.manaCost !== '') {
+    // ... fetch land logic
+  }
+  
+  // Parse hands without the fetches
+  let goodHands = parseHands(cardsDrawn - i, sudoCard, others);
+  
+  // Sum probabilities
+  let P = '0';
+  goodHands.forEach(hand => {
+    h = hypergeometric(cardsDrawn - i, hand, memo)
+    P = additionString(h, P);
+  });
+  
+  PP += parseFloat(multiplyString(P, muliplier))
+}
+```
+
+### The "sudoCard" concept
+
+When fetch lands are drawn, the algorithm creates a "pseudo card" with adjusted mana cost:
+
+```javascript ArithmaticHelpers.js:91-124
+let sudoCard = copy(card)
+
+if (i > 0 && sudoCard.manaCost !== '') {
+  let manaCost = cardCost(sudoCard)
+  let fetched = manaToFetch(others, fetches[i - 1].fetchOptions)
+  let colorsFetched = (fetched.ProducibleManaColors) 
+    ? fetched.ProducibleManaColors.split(',').filter(v => manaCost[v] > 0) 
+    : ''
+  
+  // If fetch can get multiple colors we need
+  if (colorsFetched.length > 1) {
+    // Create a split mana symbol (e.g., {U}{R} becomes {UR})
+    if (manaCost[colorsFetched[0] + colorsFetched[1]]) 
+      manaCost[colorsFetched[0] + colorsFetched[1]] += 1
+    else 
+      manaCost[colorsFetched[0] + colorsFetched[1]] = 1
+    
+    manaCost[colorsFetched[0]]--
+    manaCost[colorsFetched[1]]--
+  }
+  
+  // Rebuild the sudoCard with adjusted cost
+  manaCost = Object.keys(manaCost).reduce((a, b) => {
+    if (manaCost[b] > 0) a += ('{' + b + '}').repeat(manaCost[b])
+    return a
+  }, '')
+  sudoCard = Object.assign({}, sudoCard, { manaCost: manaCost || '' })
+}
+```
+
+<Tip>
+  The fetch land handling is one of the most sophisticated parts of the algorithm, allowing it to accurately model the flexibility that fetches provide.
+</Tip>
+
+## Arithmetic helpers for large numbers
+
+Because binomial coefficients can become astronomically large, the algorithm implements string-based arithmetic:
+
+### `nCk` - Binomial coefficient
+
+```javascript ArithmaticHelpers.js:427-436
+function nCk(n, k) {
+  let result = '1';
+  let d = 1;
+  for (var i = n; i > Math.max(n - k, k); i--) {
+    result = multiplyString(result, i.toString());
+    result = divideString(result, d.toString());
+    d++;
+  }
+  return result;
+}
+```
+
+Example: `C(60, 7) = 386,206,920` - This fits in a JS number, but `C(99, 50)` for Commander decks does not.
+
+### `multiplyString` - Large number multiplication
+
+```javascript ArithmaticHelpers.js:466-486
+function multiplyString(a, b) {
+  var aa = a.split('').reverse();
+  var bb = b.split('').reverse();
+  var stack = [];
+  
+  // Grade-school multiplication algorithm
+  for (var i = 0; i < aa.length; i++) {
+    for (var j = 0; j < bb.length; j++) {
+      var m = aa[i] * bb[j];
+      stack[i + j] = stack[i + j] ? stack[i + j] + m : m;
+    }
+  }
+  
+  // Handle carries
+  for (var i = 0; i < stack.length; i++) {
+    var num = stack[i] % 10;
+    var move = Math.floor(stack[i] / 10);
+    stack[i] = num;
+    if (stack[i + 1]) stack[i + 1] += move;
+    else if (move != 0) stack[i + 1] = move;
+  }
+  
+  return stack.reverse().join('').replace(/^(0(?!$))+/, '');
+}
+```
+
+### Other arithmetic functions
+
+<CardGroup cols={2}>
+  <Card title="additionString" icon="plus">
+    Adds two arbitrarily large numbers represented as strings (ArithmaticHelpers.js:519-535)
+  </Card>
+  <Card title="subtractString" icon="minus">
+    Subtracts two large numbers, handles negative results (ArithmaticHelpers.js:537-554)
+  </Card>
+  <Card title="divideString" icon="divide">
+    Divides large numbers, optional decimal places (ArithmaticHelpers.js:489-517)
+  </Card>
+  <Card title="greaterThan" icon="greater-than">
+    Compares two string numbers, handles negatives (ArithmaticHelpers.js:558-567)
+  </Card>
+</CardGroup>
+
+## Helper functions
+
+### `cardCost` - Parse mana cost
+
+```javascript ArithmaticHelpers.js:309-324
+function cardCost(card) {
+  return card.manaCost
+    .split('{')
+    .slice(1)
+    .map(v => v.slice(0, -1))
+    .reduce((a, b) => {
+      if (Object.keys(a).includes(b)) {
+        a[b]++;
+      } else {
+        if (!['B', 'G', 'W', 'R', 'U'].includes(b[0]))
+          a.C = !isNaN(parseInt(b)) ? parseInt(b) : 0;
+        else a[b] = 1;
+      }
+      return a;
+    }, { C: 0 });
+}
+```
+
+Converts `{2}{U}{U}` → `{ C: 2, U: 2 }`
+
+### `JSONmanaBase` - Categorize lands
+
+```javascript ArithmaticHelpers.js:297-305
+function JSONmanaBase(deck) {
+  return deck.reduce((a, b) => {
+    if (b.ProducibleManaColors) {
+      if (a[b.ProducibleManaColors]) a[b.ProducibleManaColors]++;
+      else if (b.ProducibleManaColors !== 'false') a[b.ProducibleManaColors] = 1;
+    }
+    return a;
+  }, {});
+}
+```
+
+Creates bins like `{ 'U': 10, 'R': 8, 'U,R': 4 }`
+
+## Performance considerations
+
+1. **Memoization**: Caches `nCk` calculations to avoid redundant computation
+2. **Early termination**: `cardPlayable` check prevents unnecessary hand parsing
+3. **String arithmetic**: Handles arbitrarily large numbers without overflow
+4. **Vandermonde's identity**: Efficiently partitions fetch land scenarios
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Hypergeometric distribution" icon="square-root-variable" href="/algorithm/hypergeometric-distribution">
+    Understand the mathematical foundation
+  </Card>
+  <Card title="Examples" icon="code" href="/algorithm/examples">
+    See the algorithm in action with real decks
+  </Card>
+</CardGroup>

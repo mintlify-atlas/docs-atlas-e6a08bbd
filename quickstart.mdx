@@ -1,80 +1,156 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get MTG Deck Builder up and running in minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have the following installed:
 
-### Step 1: Set up your local environment
+- **Node.js** (v8 or higher recommended)
+- **npm** (comes with Node.js)
+- **PostgreSQL** database
+- **Git** for cloning the repository
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Tip>
+The application uses a PostgreSQL database to store deck and card data. Make sure PostgreSQL is installed and running on your system.
+</Tip>
+
+## Installation and setup
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the MTG Deck Builder repository to your local machine:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    git clone <repository-url>
+    cd mtgDeckBuilder
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    Install all required npm packages:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```bash
+    npm install
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    This installs:
+    - **React** and **Redux** for the frontend
+    - **Express** for the backend server
+    - **Sequelize** for database ORM
+    - **Material-UI** for the component library
+    - **Webpack** for bundling
+  </Step>
+  
+  <Step title="Configure the database">
+    Set up your PostgreSQL database connection. The application uses Sequelize ORM and will automatically sync your database schema on startup.
+    
+    <Note>
+    Make sure your PostgreSQL server is running and accessible. The database configuration is typically found in the server/db/models directory.
+    </Note>
+  </Step>
+  
+  <Step title="Start the development server">
+    Launch both the webpack dev server and the backend API:
+    
+    ```bash
+    npm run start:dev
+    ```
+    
+    This command:
+    - Starts webpack in watch mode to bundle your React application
+    - Runs nodemon to automatically restart the server on changes
+    - Syncs the database schema
+    - Starts the Express server on port 4000
+    
+    You should see output indicating:
+    ```
+    ***************************
+    Listening on Port: 4000
+    ```
+  </Step>
+  
+  <Step title="Access the application">
+    Open your browser and navigate to:
+    
+    ```
+    http://localhost:4000
+    ```
+    
+    You should see the MTG Deck Builder interface with:
+    - A card search/selector at the top
+    - An empty deck list table with columns for card names, quantities, and probability calculations
+    - Column headers showing turns 1-8 for probability analysis
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Building your first deck
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Once the application is running, you can start building your deck:
 
-### Step 3: Go live
+<Steps>
+  <Step title="Search for cards">
+    Use the card search interface to find Magic cards you want to add to your deck. The application connects to card data to provide autocomplete suggestions.
+  </Step>
+  
+  <Step title="Add cards to your deck">
+    Select cards from the search results to add them to your deck. Each card will appear as a row in the deck list table.
+  </Step>
+  
+  <Step title="Adjust quantities">
+    Use the increment (+) and decrement (-) buttons to adjust card quantities:
+    - Most cards are limited to 4 copies (per Magic rules)
+    - Basic lands can be added without limit
+    - The green (+) button adds a copy
+    - The blue (-) button removes a copy
+    - The red (×) button removes the card entirely
+  </Step>
+  
+  <Step title="View probability analysis">
+    As you build your deck, the columns labeled 1-8 show the probability of drawing each card by turns 1 through 8. This helps you:
+    - Ensure you have enough mana sources to cast your spells on time
+    - Identify if you need more or fewer lands of specific colors
+    - Optimize your curve based on when you can reliably cast your spells
+  </Step>
+  
+  <Step title="Preview cards">
+    Click the eye icon next to any card to view its full image in a side drawer. This pulls the official card image from the Wizards of the Coast Gatherer database.
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Tip>
+The probability calculations update in real-time as you modify your deck, giving you instant feedback on how changes affect your mana consistency.
+</Tip>
 
-## Next steps
+## Production build
 
-Now that you have your docs running, explore these key features:
+To create a production build:
+
+```bash
+npm run start
+```
+
+This runs the production server without webpack watch mode or nodemon auto-reload.
+
+## What's next?
+
+Now that you have MTG Deck Builder running, explore the features in depth:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Deck Building" icon="layer-group" href="/features/deck-building">
+    Learn how to manage your deck with the interactive interface
+  </Card>
+  
+  <Card title="Probability Calculator" icon="calculator" href="/features/probability-calculator">
+    Understand how the hypergeometric distribution analysis works
+  </Card>
+  
+  <Card title="Mana Optimization" icon="chart-line" href="/features/mana-optimization">
+    Master multi-color mana bases and fetch land strategies
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate MTG Deck Builder into your own applications
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

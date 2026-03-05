@@ -1,0 +1,211 @@
+---
+title: Deck building
+description: Build and manage your MTG deck with an intuitive table-based interface
+---
+
+The deck builder provides a comprehensive interface for constructing and managing your Magic: The Gathering deck. The interactive table displays all cards in your deck with real-time probability calculations.
+
+## Adding cards to your deck
+
+Cards are added to your deck through the search interface. When you add a card:
+
+1. The card is initialized with a quantity of 1
+2. It appears in the deck list table
+3. Probability calculations begin automatically for non-land cards
+4. The card is stored in Redux state with a unique identifier
+
+<Info>
+If a card is already in your deck, adding it again won't create a duplicate entry. Use the quantity controls to adjust the count instead.
+</Info>
+
+## Adjusting card quantities
+
+Each card in your deck has increment (+) and decrement (-) buttons to adjust quantities:
+
+### Increment button (green)
+- Adds one copy of the card to your deck
+- **Automatically disabled** when you have 4 copies of non-basic land cards
+- Basic lands can exceed the 4-card limit
+
+### Decrement button (blue)
+- Removes one copy of the card from your deck
+- Disabled when quantity is less than 1
+
+<Warning>
+The 4-card limit is enforced automatically for all cards except Basic Lands. The increment button will be disabled once you reach this limit.
+</Warning>
+
+```javascript
+// From DeckList.js:122-127
+<FloatingActionButton
+    disabled={card.quantity>3 && !card.type.includes('Basic Land')}
+    backgroundColor={this.green}
+    mini={true}
+    onClick={() => this.props.updateCardQuant(card.uniqueName, card.quantity + 1)}>
+```
+
+## Removing cards
+
+The remove button (red X icon) completely removes a card from your deck, regardless of quantity. This action:
+- Removes the card from the deck list table
+- Updates Redux state by filtering out the card by `uniqueName`
+- Triggers recalculation of probabilities for remaining cards
+
+## Viewing card images
+
+Click the eye icon next to any card to view its full card image in a side drawer:
+
+- The drawer opens from the left side
+- Card images are fetched from Wizards of the Coast's Gatherer database
+- The image URL format: `http://gatherer.wizards.com/Handlers/Image.ashx?multiverseid={id}&type=card`
+- Click the eye icon again to close the drawer
+
+<Tip>
+The drawer is disabled while probability calculations are running to prevent state conflicts.
+</Tip>
+
+## Deck list table interface
+
+The main deck list table displays comprehensive information about each card:
+
+### Table columns
+
+| Column | Description |
+|--------|-------------|
+| **Name** | Card name |
+| **View** | Eye icon button to display card image |
+| **Quantity** | Current number of copies in deck |
+| **Inc** | Increment quantity button |
+| **Dec** | Decrement quantity button |
+| **Remove** | Remove card entirely from deck |
+| **1-8** | Probability percentages for turns 1 through 8 |
+
+### Turn-by-turn columns
+
+The columns numbered 1-8 represent game turns and display:
+- **For non-land cards**: Probability percentage that you can play the card by that turn
+- **For land cards**: Mana symbol icon showing what colors the land produces
+- **Loading state**: Circular progress indicator while calculating
+
+```javascript
+// From DeckList.js:150-161
+[0,1,2,3,4,5,6,7].map(v=>{
+    return (
+        <TableRowColumn style={{ width: '5%' }}>
+            <ProbCell
+                draws={7 + v}
+                card={card}
+                deck={this.convertToList(this.props.deckList)}
+                calculating={this.state.calculating}
+            />
+        </TableRowColumn>
+    )
+})
+```
+
+<Note>
+The `draws` parameter (7 + turn number) accounts for your starting hand of 7 cards plus one draw per turn.
+</Note>
+
+## Redux state management
+
+The deck builder uses Redux for centralized state management with three core actions:
+
+### ADD_CARD_TO_DECK
+
+Adds a new card to the deck with quantity 1:
+
+```javascript
+export const addCardToDeck = (newCard) => {
+    return {
+        type: ADD_CARD_TO_DECK,
+        newCard: Object.assign({},newCard,{quantity:1})
+    }
+}
+```
+
+### UPDATE_CARD_IN_DECK
+
+Updates properties of an existing card (typically quantity):
+
+```javascript
+export const updateCardInDeck = (uniqueName, changes) => {
+    return {
+        type: UPDATE_CARD_IN_DECK,
+        uniqueName,
+        changes
+    }
+}
+```
+
+### REMOVE_CARD_FROM_DECK
+
+Removes a card completely from the deck:
+
+```javascript
+export const removeCardFromDeck = (uniqueName) => {
+    return {
+        type: REMOVE_CARD_FROM_DECK,
+        uniqueName
+    }
+}
+```
+
+### Reducer logic
+
+The deck reducer manages state updates:
+
+```javascript
+const deckReducer = (state = [], action) => {
+    switch (action.type) {
+        case REMOVE_CARD_FROM_DECK:
+            return state.filter(v => action.uniqueName !== v.uniqueName)
+        case UPDATE_CARD_IN_DECK:
+            return state.map(v => (action.uniqueName === v.uniqueName) ? 
+                Object.assign({},v,action.changes) : v)
+        case ADD_CARD_TO_DECK:
+            return (state.map(v=>v.uniqueName).includes(action.newCard.uniqueName))?
+                state:[...state, action.newCard]
+        default:
+            return state
+    }
+}
+```
+
+<Info>
+The `ADD_CARD_TO_DECK` action checks if the card already exists by `uniqueName` and won't create duplicates.
+</Info>
+
+## Component connection
+
+The DeckList component connects to Redux using `react-redux`:
+
+```javascript
+function mapStateToProps(storeState) {
+    return {
+        deck: storeState.deckReducer
+    }
+}
+
+function mapDispatchToProps(dispatch) {
+    return {
+        updateCardQuant: (uniqueName,value) => {
+            dispatch(updateCardInDeck(uniqueName,{quantity: value}))
+        },
+        removeCard: (cardUniqName) => {
+            dispatch(removeCardFromDeck(cardUniqName));
+        }
+    }
+}
+```
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Probability calculator" icon="calculator" href="/features/probability-calculator">
+    Learn how playability probabilities are calculated
+  </Card>
+  <Card title="Mana optimization" icon="droplet" href="/features/mana-optimization">
+    Understand mana base analysis and optimization
+  </Card>
+</CardGroup>

@@ -1,0 +1,303 @@
+---
+title: Probability endpoint
+description: Calculate the probability of being able to play a card given your deck composition and number of draws
+---
+
+The probability endpoint calculates the likelihood of being able to play a specific card by a given turn, taking into account your deck composition, mana requirements, and card draw.
+
+## Endpoint
+
+```
+POST /api/alg
+```
+
+## Request body
+
+The endpoint accepts a JSON object with the following parameters:
+
+<ParamField path="draws" type="number" required>
+  The number of cards drawn, including the opening hand. For example, `10` represents turn 3 on the play (7 card opening hand + 3 draw steps).
+</ParamField>
+
+<ParamField path="card" type="object" required>
+  The card object for which you want to calculate the probability of playing.
+  
+  <Expandable title="Card object properties">
+    <ParamField path="card.name" type="string" required>
+      The name of the card (e.g., "Lightning Bolt")
+    </ParamField>
+    
+    <ParamField path="card.manaCost" type="string" required>
+      The mana cost in MTG format (e.g., "{2}{R}{R}" for 2 generic and 2 red mana)
+    </ParamField>
+    
+    <ParamField path="card.type" type="string" required>
+      The card type (e.g., "Instant", "Creature — Human Wizard", "Land")
+    </ParamField>
+    
+    <ParamField path="card.ProducibleManaColors" type="string" required>
+      Comma-separated mana colors the card can produce. Use "false" for non-land cards.
+    </ParamField>
+    
+    <ParamField path="card.types" type="array">
+      Array of card types (e.g., ["Instant"], ["Creature"])
+    </ParamField>
+    
+    <ParamField path="card.text" type="string">
+      The card's rules text
+    </ParamField>
+    
+    <ParamField path="card.fetchOptions" type="string">
+      For fetch lands, the land types it can search for (e.g., "Island,Mountain")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="deck" type="array" required>
+  An array of card objects representing your entire deck. Each card in the deck should have the same structure as the `card` parameter above.
+</ParamField>
+
+## Response
+
+<ResponseField name="probability" type="number | string">
+  Returns a number between 0 and 1 representing the probability of being able to play the card, or an empty string (`""`) if the calculation cannot be performed.
+  
+  A value of `0.847` means there's an 84.7% chance of being able to play the card by the specified turn.
+</ResponseField>
+
+## When empty string is returned
+
+The endpoint returns an empty string in the following scenarios:
+
+- The target card is a **land card** (lands don't require mana to play)
+- The number of draws exceeds the deck size (impossible scenario)
+- The deck composition cannot support casting the card (not enough mana sources of the required colors)
+
+## Examples
+
+### cURL
+
+```bash
+curl -X POST http://localhost:4000/api/alg \
+  -H "Content-Type: application/json" \
+  -d '{
+    "draws": 10,
+    "card": {
+      "name": "Tarmogoyf",
+      "manaCost": "{1}{G}",
+      "type": "Creature — Lhurgoyf",
+      "types": ["Creature"],
+      "ProducibleManaColors": "false",
+      "fetchOptions": ""
+    },
+    "deck": [
+      {
+        "name": "Forest",
+        "type": "Land — Forest",
+        "manaCost": "",
+        "ProducibleManaColors": "G",
+        "fetchOptions": ""
+      },
+      {
+        "name": "Misty Rainforest",
+        "type": "Land",
+        "manaCost": "",
+        "ProducibleManaColors": "F",
+        "fetchOptions": "Island,Forest"
+      },
+      {
+        "name": "Lightning Bolt",
+        "manaCost": "{R}",
+        "type": "Instant",
+        "ProducibleManaColors": "false",
+        "fetchOptions": ""
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+0.923
+```
+
+### JavaScript (axios)
+
+This example shows how the probability calculation is used in the React frontend:
+
+```javascript
+import axios from 'axios';
+
+const calculateProbability = async (draws, card, deck) => {
+  try {
+    const response = await axios.post('api/alg', {
+      draws: draws,
+      card: card,
+      deck: deck
+    });
+    
+    const probability = response.data;
+    
+    if (probability === '') {
+      console.log('Cannot calculate probability for this card');
+    } else {
+      console.log(`Probability: ${(probability * 100).toFixed(1)}%`);
+    }
+    
+    return probability;
+  } catch (error) {
+    console.error('Error calculating probability:', error);
+    throw error;
+  }
+};
+
+// Example usage
+const exampleCard = {
+  name: "Dark Confidant",
+  manaCost: "{1}{B}",
+  type: "Creature — Human Wizard",
+  types: ["Creature"],
+  ProducibleManaColors: "false",
+  fetchOptions: ""
+};
+
+const exampleDeck = [
+  {
+    name: "Swamp",
+    type: "Land — Swamp",
+    manaCost: "",
+    ProducibleManaColors: "B",
+    fetchOptions: ""
+  },
+  // ... more cards
+];
+
+calculateProbability(9, exampleCard, exampleDeck);
+```
+
+**Response:**
+```json
+0.874
+```
+
+### Fetch lands example
+
+Fetch lands add complexity to the calculation. Here's an example with a fetch land:
+
+```javascript
+const deckWithFetch = [
+  {
+    name: "Polluted Delta",
+    type: "Land",
+    manaCost: "",
+    ProducibleManaColors: "F",
+    fetchOptions: "Island,Swamp"
+  },
+  {
+    name: "Island",
+    type: "Land — Island",
+    manaCost: "",
+    ProducibleManaColors: "U",
+    fetchOptions: ""
+  },
+  {
+    name: "Swamp",
+    type: "Land — Swamp",
+    manaCost: "",
+    ProducibleManaColors: "B",
+    fetchOptions: ""
+  }
+];
+
+const blueCard = {
+  name: "Brainstorm",
+  manaCost: "{U}",
+  type: "Instant",
+  types: ["Instant"],
+  ProducibleManaColors: "false",
+  fetchOptions: ""
+};
+
+axios.post('api/alg', {
+  draws: 8,
+  card: blueCard,
+  deck: deckWithFetch
+});
+```
+
+The algorithm recognizes that Polluted Delta can fetch an Island, making it a valid mana source for blue spells.
+
+## Error responses
+
+### Missing required fields
+
+**Request:**
+```json
+{
+  "draws": 10,
+  "card": {
+    "name": "Lightning Bolt"
+  }
+}
+```
+
+**Response:** `500 Internal Server Error`
+
+The server will log an error if required fields are missing from the card object or if the deck array is not provided.
+
+### Invalid data types
+
+**Request:**
+```json
+{
+  "draws": "ten",
+  "card": {...},
+  "deck": [...]
+}
+```
+
+**Response:** `500 Internal Server Error`
+
+The `draws` parameter must be a number.
+
+## Notes
+
+<Note>
+  The probability calculation takes into account:
+  - Mana cost requirements (both colored and colorless)
+  - Available mana sources in the deck
+  - Fetch lands and their ability to search for specific land types
+  - The number of turns elapsed (derived from draws minus opening hand size)
+  - Whether you have enough lands to produce the required mana by that turn
+</Note>
+
+<Warning>
+  The calculation assumes:
+  - A starting hand size of 7 cards
+  - No mulligans
+  - Playing one land per turn
+  - All lands enter untapped and can produce mana immediately
+</Warning>
+
+## Algorithm details
+
+The probability calculation uses a hypergeometric distribution combined with combinatorial analysis to determine all possible hands that would allow you to play the card. The algorithm:
+
+1. Determines if the card is theoretically playable given the deck composition
+2. Calculates all possible hand combinations that contain the card and sufficient mana
+3. Handles fetch lands by considering their ability to search for specific land types
+4. Uses Vandermonde's identity to partition probabilities across different fetch land scenarios
+5. Sums the probabilities of all viable hands
+
+For a detailed explanation of the mathematical approach, see the [algorithm documentation](/algorithm/how-it-works).
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="API overview" icon="book" href="/api/overview">
+    Learn about all available endpoints
+  </Card>
+  <Card title="Algorithm explanation" icon="function" href="/algorithm/how-it-works">
+    Deep dive into the math
+  </Card>
+</CardGroup>

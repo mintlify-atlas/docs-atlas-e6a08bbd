@@ -1,0 +1,601 @@
+---
+title: Examples
+description: Real-world probability calculations for different deck types
+---
+
+## Introduction
+
+These examples demonstrate how the MTG Deck Builder algorithm calculates probabilities for different deck compositions and mana costs. Each example includes the deck composition, the card being analyzed, the probability calculation, and key insights.
+
+## Example 1: Mono-color deck
+
+### Deck composition
+
+```text
+24 Island
+4 Lightning Bolt
+32 other spells
+
+Total: 60 cards
+```
+
+### Card to analyze
+
+**Lightning Bolt** - `{R}`
+- Converted mana cost: 1
+- Color requirement: 1 red source
+
+### Expected result
+
+<Warning>
+  This deck cannot cast Lightning Bolt! The algorithm will return `0` probability.
+</Warning>
+
+**Why?** The `cardPlayable` check fails because:
+- The deck has 0 red sources
+- Lightning Bolt requires at least 1 red source
+- Color condition fails: `false && true && true && true = false`
+
+From the code (ArithmaticHelpers.js:359-368):
+```javascript
+let colorCondition = Object.keys(cost).reduce((a, b) => {
+  Object.keys(manaBase).forEach(v => {
+    if (v.split(',').includes(b)) {
+      let min = Math.min(manaBase[v], cost[b]);
+      cost[b] -= min;
+      manaBase[v] -= min;
+    }
+  });
+  return a && cost[b] <= 0;  // cost['R'] = 1, fails check
+}, true);
+```
+
+<Tip>
+  The algorithm prevents impossible scenarios before doing expensive probability calculations.
+</Tip>
+
+## Example 2: Two-color deck with basics
+
+### Deck composition
+
+```text
+10 Island
+10 Mountain
+4 Lightning Bolt
+36 other spells
+
+Total: 60 cards
+```
+
+### Card to analyze
+
+**Lightning Bolt** - `{R}`
+- On turn 1 (7 cards drawn)
+
+### Calculation walkthrough
+
+**Step 1: Check if playable**
+
+```javascript
+cost = { R: 1, C: 0 }
+convertedManaCost = 1
+manaBase = { 'U': 10, 'R': 10 }
+
+// Turn condition: Can we cast a 1-drop on turn 1?
+draws - startingHandSize >= convertedManaCost - 1
+7 - 7 >= 1 - 1
+0 >= 0 ✓
+
+// Mana condition: Enough lands total?
+20 >= 1 ✓
+
+// Color condition: Enough red sources?
+10 red sources >= 1 required ✓
+
+// Includes condition
+deck.includes('Lightning Bolt') ✓
+
+// Result: cardPlayable returns true
+```
+
+**Step 2: Calculate denominator**
+
+```javascript
+denominator = nCk(60, 7)
+            = C(60, 7)
+            = 386,206,920
+```
+
+**Step 3: Parse viable hands**
+
+A hand can cast Lightning Bolt on turn 1 if it contains:
+- 1 copy of Lightning Bolt
+- At least 1 Mountain
+- Any remaining cards
+
+Possible hand structures:
+```javascript
+// 1 Bolt + 1 Mountain + 5 other cards
+[
+  [1, 4, 'T'],    // 1 Bolt drawn from 4 in deck
+  [0, 36, 'O'],   // 0 other spells drawn from 36
+  [1, 10, 'R'],   // 1 Mountain drawn from 10
+  [0, 10, 'U'],   // 0 Islands drawn from 10  
+  [5, 36, 'O']    // 5 other cards from remaining
+]
+
+// 1 Bolt + 2 Mountains + 4 other cards
+// 1 Bolt + 3 Mountains + 3 other cards
+// ... and so on
+```
+
+**Step 4: Calculate hypergeometric probability**
+
+For each viable hand, calculate:
+```javascript
+numerator = C(4, 1) × C(36, 0) × C(10, 1) × C(10, 0) × C(36, 5)
+          = 4 × 1 × 10 × 1 × 376,992
+          = 15,079,680
+```
+
+Sum across all viable hands, then:
+```javascript
+P(cast Bolt on turn 1) = totalNumerator / denominator
+                       ≈ 0.56 or 56%
+```
+
+<Note>
+  With 10 red sources out of 24 total lands, you have about a 56% chance to cast a red 1-drop on turn 1. Frank Karsten's analysis suggests you need ~14 sources for 90% consistency.
+</Note>
+
+## Example 3: Multi-color deck with fetch lands
+
+### Deck composition
+
+```text
+4 Scalding Tarn (fetch: Island or Mountain)
+6 Island
+6 Mountain
+4 Steam Vents (produces {U} or {R})
+4 Delver of Secrets (cost: {U})
+36 other spells
+
+Total: 60 cards
+```
+
+### Card to analyze
+
+**Delver of Secrets** - `{U}`
+- On turn 1 (7 cards drawn)
+
+### How fetch lands affect calculation
+
+Fetch lands are special because they can become either Island or Mountain:
+
+```javascript
+// From ArithmaticHelpers.js:62-72
+let fetches = deck.filter(v => {
+  if (v.ProducibleManaColors) {
+    if (v.ProducibleManaColors.includes('F')) {
+      return manaToFetch(deck, v.fetchOptions).ProducibleManaColors
+        .split(',').reduce((a, b) => {
+          return a || C[b] > 0
+        }, false)
+    }
+  }
+  else return false
+})
+// fetches = 4 Scalding Tarns
+
+let others = deck.filter(v => !fetches.includes(v))
+// others = 6 Island + 6 Mountain + 4 Steam Vents + 40 spells
+```
+
+**Vandermonde's identity partition**
+
+The algorithm calculates probability for drawing 0, 1, 2, 3, or 4 fetch lands separately:
+
+<Accordion title="Case 1: 0 fetches drawn">
+  ```javascript
+  multiplier = C(4, 0) = 1
+  
+  // Parse hands with 7 cards from 56 non-fetches
+  // Need: 1 Delver + 1 blue source from (6 Island + 4 Steam Vents)
+  
+  goodHands = parseHands(7, delver, others)
+  
+  // Calculate probability
+  P0 = (sum of all good hands) / C(56, 7)
+  ```
+</Accordion>
+
+<Accordion title="Case 2: 1 fetch drawn">
+  ```javascript
+  multiplier = C(4, 1) = 4
+  
+  // The fetch effectively becomes a blue source
+  // Parse hands with 6 remaining cards
+  
+  // Create sudoCard: Delver with fetch providing {U}
+  // This satisfies the {U} requirement
+  sudoCard = { ...delver, manaCost: '' }  // Cost satisfied by fetch
+  
+  goodHands = parseHands(6, sudoCard, others)
+  
+  // Calculate probability
+  P1 = (sum of all good hands) / C(56, 6) × 4
+  ```
+  
+  <Tip>
+    When a fetch is drawn, it reduces the mana cost requirement because the fetch can guarantee finding a blue source.
+  </Tip>
+</Accordion>
+
+<Accordion title="Case 3: 2+ fetches drawn">
+  ```javascript
+  // Similar logic for 2, 3, 4 fetches
+  // Each additional fetch over-satisfies the requirement
+  
+  multiplier = C(4, 2) = 6
+  // ... calculate P2
+  
+  multiplier = C(4, 3) = 4
+  // ... calculate P3
+  
+  multiplier = C(4, 4) = 1
+  // ... calculate P4
+  ```
+</Accordion>
+
+**Final probability**
+
+```javascript
+PP = P0 + P1 + P2 + P3 + P4
+   ≈ 0.72 or 72%
+```
+
+### Why is this higher than Example 2?
+
+Even though both decks have 10 blue sources:
+- Example 2: 10 fixed blue sources (Islands)
+- Example 3: 6 Islands + 4 Steam Vents + 4 Scalding Tarns
+
+The fetch lands effectively act as blue sources, and Steam Vents count as both blue and red. This flexibility increases the probability.
+
+<Note>
+  Fetch lands improve consistency not by increasing the raw number of sources, but by providing perfect fixing when drawn.
+</Note>
+
+## Example 4: Complex mana cost with split symbols
+
+### Deck composition
+
+```text
+8 Island
+8 Mountain  
+4 Steam Vents
+4 Boros Charm (cost: {R}{W})
+36 other spells
+
+Total: 60 cards
+```
+
+### Card to analyze
+
+**Boros Charm** - `{R}{W}`
+- On turn 3 (9 cards drawn)
+- Requires 1 red source AND 1 white source
+
+### Expected result
+
+```javascript
+P(cast on turn 3) = 0 or 0%
+```
+
+**Why?** The deck has no white sources!
+
+```javascript
+manaBase = { 'U': 8, 'R': 8, 'U,R': 4 }
+cost = { R: 1, W: 1, C: 0 }
+
+// Color condition check:
+Object.keys(cost).forEach(color => {
+  // For 'R': Found in 'R' and 'U,R', satisfied ✓
+  // For 'W': Not found in any manaBase keys, fails ✗
+})
+```
+
+### Fixed deck composition
+
+Let's add white sources:
+
+```text
+6 Island
+6 Mountain
+4 Sacred Foundry (produces {R} or {W})
+4 Steam Vents (produces {U} or {R})
+4 Boros Charm
+36 other spells
+```
+
+Now:
+```javascript
+manaBase = { 'U': 6, 'R': 6, 'R,W': 4, 'U,R': 4 }
+cost = { R: 1, W: 1, C: 0 }
+
+// Color condition check:
+// For 'R': 6 Mountains + 4 Sacred Foundry + 4 Steam Vents = 14 sources ✓
+// For 'W': 4 Sacred Foundry = 4 sources ✓
+```
+
+**Calculation**
+
+Viable hands must contain:
+- 1 Boros Charm
+- At least 1 red source (Mountain, Sacred Foundry, or Steam Vents)
+- At least 1 white source (Sacred Foundry)
+- Enough turns to cast it (turn 3 = 2-drop on curve)
+
+```javascript
+// Turn condition:
+9 - 7 >= 2 - 1
+2 >= 1 ✓
+
+// Many possible hand combinations:
+// 1. Charm + 1 Sacred Foundry (provides both colors) + 5 other
+// 2. Charm + 1 Mountain + 1 Sacred Foundry + 4 other
+// 3. Charm + 1 Steam Vents + 1 Sacred Foundry + 4 other
+// ... etc
+
+P(cast on turn 3) ≈ 0.45 or 45%
+```
+
+<Warning>
+  With only 4 white sources, consistency is low. Frank Karsten's analysis suggests ~14 sources for a 1-drop on turn 1, scaling up for later turns.
+</Warning>
+
+## Example 5: High mana cost card
+
+### Deck composition
+
+```text
+24 Island
+4 Consecrated Sphinx (cost: {4}{U}{U})
+32 other spells
+```
+
+### Card to analyze
+
+**Consecrated Sphinx** - `{4}{U}{U}`
+- On turn 6 (12 cards drawn)
+- Converted mana cost: 6
+- Requires 2 blue sources
+
+### Calculation
+
+```javascript
+cost = { C: 4, U: 2 }
+convertedManaCost = 6
+manaBase = { 'U': 24 }
+
+// Turn condition:
+12 - 7 >= 6 - 1
+5 >= 5 ✓
+
+// Mana condition:
+24 >= 6 ✓
+
+// Color condition:
+24 blue sources >= 2 required ✓
+```
+
+**Viable hands**
+
+Need:
+- 1 Sphinx
+- At least 6 lands total (at least 2 must be Islands)
+- The other 4 lands can be any Island
+
+Since all 24 lands are Islands, any hand with 1 Sphinx and 6+ lands works:
+
+```javascript
+// Possible combinations:
+// 1 Sphinx + 6 Islands + 5 other = C(4,1) × C(24,6) × C(32,5)
+// 1 Sphinx + 7 Islands + 4 other = C(4,1) × C(24,7) × C(32,4)
+// ... up to ...
+// 1 Sphinx + 11 Islands + 0 other = C(4,1) × C(24,11) × C(32,0)
+
+P(cast on turn 6) ≈ 0.87 or 87%
+```
+
+<Tip>
+  24 lands in a 60-card deck gives excellent consistency for 6-mana spells by turn 6. This is a typical mana base for control decks.
+</Tip>
+
+## Common pitfalls and edge cases
+
+### Pitfall 1: Not enough colored sources
+
+```text
+Deck:
+20 lands total
+- 10 Forests
+- 10 Plains
+
+Trying to cast: Lightning Bolt {R}
+```
+
+**Result**: 0% probability (no red sources)
+
+**Fix**: Add red sources or change the card
+
+### Pitfall 2: Not enough lands total
+
+```text
+Deck:
+16 lands total
+44 spells
+
+Trying to cast: Ugin {8}
+```
+
+**Result**: Very low probability, even on turn 8+
+
+**Why**: 16 lands is too few to reliably hit 8 land drops. Average case: you draw ~3-4 lands in your opening hand, then ~1 per turn = 7-8 lands by turn 8. But variance means you often miss.
+
+**Fix**: Increase land count to at least 24 for 8-mana spells, or add ramp spells
+
+### Pitfall 3: Mulligans not accounted for
+
+The algorithm uses `startingHandSize` parameter:
+
+```javascript
+probabilityOfPlayingCard(6, card, deck, 6)  // After 1 mulligan
+probabilityOfPlayingCard(5, card, deck, 5)  // After 2 mulligans
+```
+
+Keep in mind that in real games, you mulligan bad hands, which increases consistency beyond the raw math.
+
+### Edge case 1: Split mana symbols
+
+```text
+Card: Fire // Ice - {2}{R} // {1}{U}
+```
+
+The algorithm handles this by treating dual lands as producing the split symbol:
+
+```javascript
+// From ArithmaticHelpers.js:42-55
+Object.keys(C).forEach(v => {
+  if (isNaN(parseInt(v)) && v.length > 1) {
+    deck = deck.map(card => {
+      if (card.ProducibleManaColors) {
+        if (card.ProducibleManaColors.split('').reduce((a, b) => {
+          return a || v.includes(b)
+        }, false)) {
+          card.ProducibleManaColors += ',' + v
+        }
+      }
+      return card
+    })
+  }
+})
+```
+
+### Edge case 2: Lands that produce multiple colors
+
+```text
+City of Brass: Produces {W}{U}{B}{R}{G}
+```
+
+Stored as:
+```javascript
+{
+  name: 'City of Brass',
+  ProducibleManaColors: 'W,U,B,R,G'
+}
+```
+
+The `parseHands` function must handle the case where one land satisfies multiple color requirements (ArithmaticHelpers.js:216-239).
+
+### Edge case 3: Colorless costs
+
+```text
+Card: Kozilek {8}{C}{C}
+```
+
+The `{C}` symbol requires colorless mana specifically (not generic mana). The algorithm treats this as a color requirement:
+
+```javascript
+cost = { C: 8, 'C_colorless': 2 }
+```
+
+<Warning>
+  The current implementation (ArithmaticHelpers.js:316-319) may not fully support the colorless mana symbol `{C}` introduced in Oath of the Gatewatch. This is marked as a TODO at the top of the file.
+</Warning>
+
+## Why certain mana bases work better
+
+### Mono-color (24 basics)
+
+**Pros**:
+- Maximum consistency for single-color cards
+- No enters-tapped lands needed
+- Simple probability calculations
+
+**Cons**:
+- Cannot cast multi-color cards
+- No deck diversity
+
+### Two-color (12/12 split)
+
+**Pros**:
+- Access to two colors
+- Simple to understand
+
+**Cons**:
+- Low consistency for double-colored costs (e.g., `{U}{U}`)
+- Drawing only one color is common
+
+### Two-color with duals (8/8/8)
+
+```text
+8 Island
+8 Mountain
+8 Steam Vents
+```
+
+**Pros**:
+- Better consistency for both colors
+- Can cast `{U}{U}` and `{R}{R}` more reliably
+- Flexibility
+
+**Cons**:
+- Dual lands often enter tapped (tempo loss)
+- More expensive (if shocklands)
+
+### Two-color with fetches (8/8/4/4)
+
+```text
+8 Island
+8 Mountain
+4 Steam Vents
+4 Scalding Tarn
+```
+
+**Pros**:
+- Maximum consistency (fetches can find duals)
+- Deck thinning (minor benefit)
+- Enables delirium, revolt, etc.
+
+**Cons**:
+- Life loss from fetches + shocks
+- Vulnerable to graveyard hate
+
+<Tip>
+  The "best" mana base depends on your specific deck's color requirements, budget, and meta considerations.
+</Tip>
+
+## Testing your own deck
+
+To use the algorithm with your deck:
+
+1. **Import your decklist** in the MTG Deck Builder interface
+2. **View the probability table** for each card
+3. **Identify low-probability cards** (under 80% by their ideal turn)
+4. **Adjust your mana base**:
+   - Add more sources of the required colors
+   - Consider fetch lands or dual lands
+   - Increase total land count if needed
+5. **Re-run the calculation** and compare
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Hypergeometric distribution" icon="square-root-variable" href="/algorithm/hypergeometric-distribution">
+    Review the mathematical foundation
+  </Card>
+  <Card title="How it works" icon="gear" href="/algorithm/how-it-works">
+    Deep dive into the implementation
+  </Card>
+</CardGroup>

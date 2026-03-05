@@ -1,0 +1,200 @@
+---
+title: Development setup
+description: Set up your local development environment for the MTG Deck Builder
+---
+
+This guide will walk you through setting up the MTG Deck Builder application on your local machine for development.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js**: Version 6.x or higher (the project uses legacy dependencies)
+- **PostgreSQL**: Version 9.x or higher for database operations
+- **npm**: Comes with Node.js, used for dependency management
+- **Git**: For cloning the repository
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the MTG Deck Builder repository to your local machine:
+    
+    ```bash
+    git clone <repository-url>
+    cd mtg-deck-builder
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all required npm packages:
+    
+    ```bash
+    npm install
+    ```
+    
+    This will install all dependencies and devDependencies listed in `package.json`, including:
+    - React and Redux ecosystem
+    - Express server framework
+    - Sequelize ORM and PostgreSQL driver
+    - Webpack and Babel for bundling
+    - Material-UI for components
+  </Step>
+
+  <Step title="Set up the database">
+    Create a PostgreSQL database for the application:
+    
+    ```bash
+    createdb mtg
+    ```
+    
+    The application expects a database named `mtg` at `postgres://localhost:5432/mtg`. If you need to use a different database URL, you'll need to modify `server/db/models/index.js`.
+    
+    The database will be automatically synced when you start the server. Sequelize will create the necessary tables:
+    - `cards` - Stores MTG card data
+    - `deck` - Stores deck information
+    - `cards_decks` - Junction table for deck-card relationships
+  </Step>
+
+  <Step title="Start the development server">
+    Run the development build process:
+    
+    ```bash
+    npm run start:dev
+    ```
+    
+    This command does two things simultaneously:
+    - Runs `webpack -w` to watch and rebuild your frontend code
+    - Runs `nodemon server` to start the Express server with auto-restart
+    
+    The application will be available at `http://localhost:4000`
+  </Step>
+</Steps>
+
+## Development workflow
+
+### Hot reloading
+
+The development setup includes automatic reloading:
+
+- **Frontend changes**: Webpack watches for changes in the `app/` directory and rebuilds `public/bundle.js` automatically
+- **Backend changes**: Nodemon watches for changes in the `server/` directory and restarts the Express server
+
+Simply save your files and refresh the browser to see your changes.
+
+### Webpack configuration
+
+The project uses Webpack 3 with the following setup:
+
+```javascript
+// Entry point
+entry: './app/main'
+
+// Output
+output: './public/bundle.js'
+
+// Source maps enabled
+devtool: 'source-map'
+```
+
+Key features:
+- Babel transpilation for React and ES2015+
+- Support for `.js` and `.jsx` extensions
+- Stage-2 JavaScript features enabled
+
+### Port configuration
+
+The Express server runs on **port 4000** by default. You can change this in `server/index.js:30`.
+
+## Database seeding
+
+<Accordion title="Loading card data (optional)">
+  If you need to populate the database with MTG card data, you can use the fixtures system:
+  
+  1. Place your card data in `server/db/fixtures/`
+  2. Use `sequelize-fixtures` to load the data (implementation depends on your data source)
+  
+  The `Card` model includes fields for card properties like name, mana cost, colors, type, power/toughness, and text.
+</Accordion>
+
+## Development tools
+
+### Redux DevTools
+
+The application is configured to work with the Redux DevTools browser extension. Install the extension for Chrome or Firefox to inspect Redux state and actions.
+
+The store configuration in `app/store.js` automatically enables the extension when available:
+
+```javascript
+window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()
+```
+
+### Redux Logger
+
+Redux Logger middleware is enabled in development, logging all actions and state changes to the browser console.
+
+## Troubleshooting
+
+### Database connection errors
+
+**Error**: `ECONNREFUSED` or `database "mtg" does not exist`
+
+**Solution**: 
+- Ensure PostgreSQL is running: `pg_ctl status` or `brew services list` (macOS)
+- Create the database: `createdb mtg`
+- Check the connection string in `server/db/models/index.js:2`
+
+### Port already in use
+
+**Error**: `EADDRINUSE: address already in use :::4000`
+
+**Solution**:
+- Find the process using port 4000: `lsof -i :4000`
+- Kill the process: `kill -9 <PID>`
+- Or change the port in `server/index.js`
+
+### Webpack build errors
+
+**Error**: Babel or Webpack compilation errors
+
+**Solution**:
+- Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+- Clear the bundle: `rm public/bundle.js public/bundle.js.map`
+- Restart the development server
+
+### Module not found errors
+
+**Error**: `Cannot find module 'xyz'`
+
+**Solution**:
+- Ensure all dependencies are installed: `npm install`
+- Check for missing peer dependencies in the console output
+- Verify the import path is correct (case-sensitive on Linux)
+
+## Production build
+
+For production deployment:
+
+```bash
+webpack -p
+node main
+```
+
+Or use the production script:
+
+```bash
+npm start
+```
+
+This runs `node main` which should point to your production entry point.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="diagram-project" href="/development/architecture">
+    Learn about the application architecture and design patterns
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Guidelines for contributing to the project
+  </Card>
+</CardGroup>

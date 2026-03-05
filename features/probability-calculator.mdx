@@ -1,0 +1,246 @@
+---
+title: Probability calculator
+description: Real-time calculation of card playability probabilities for each turn
+---
+
+The probability calculator is the core analytical engine of the MTG Deck Builder. It calculates the likelihood that you'll be able to play each card in your deck by a given turn, accounting for mana availability, colored mana requirements, and fetch land mechanics.
+
+## What probabilities are calculated
+
+For each non-land card in your deck, the calculator determines:
+
+- **Playability probability**: The chance you'll have drawn the card AND have sufficient mana to cast it by a specific turn
+- **Turn-by-turn analysis**: Separate calculations for turns 1 through 8
+- **Mana availability**: Whether you have enough total mana AND the correct colors
+- **Fetch land interactions**: How fetch lands can provide necessary colored mana
+
+<Info>
+Land cards do not show probability percentages. Instead, they display mana symbol icons indicating which colors of mana they produce.
+</Info>
+
+## How to interpret percentages
+
+The percentage values in each turn column represent:
+
+```
+P(card playable on turn X) = 
+  P(drawing the card by turn X) × P(having required mana by turn X)
+```
+
+For example, if a card shows **23.4%** in the turn 3 column:
+- You have a 23.4% chance of being able to play this card by turn 3
+- This accounts for both drawing the card and having the mana to cast it
+
+### Reading the results
+
+| Percentage | Interpretation |
+|------------|----------------|
+| **0%** | Impossible to play by this turn (not enough mana sources or turns) |
+| **1-25%** | Low probability - may need more mana sources or card draw |
+| **26-50%** | Moderate probability - reasonable but not reliable |
+| **51-75%** | Good probability - likely to be playable |
+| **76-100%** | High probability - very likely to be playable |
+
+<Tip>
+For early game cards (1-3 mana), aim for higher probabilities (60%+) by turn 3-4. For late game cards, lower early-turn probabilities are expected.
+</Tip>
+
+## Turn-by-turn analysis
+
+The calculator evaluates turns 1 through 8:
+
+### Starting hand and draws
+
+The `draws` parameter is calculated as:
+
+```javascript
+// Turn 1: 7 + 0 = 7 cards (starting hand)
+// Turn 2: 7 + 1 = 8 cards (starting hand + 1 draw)
+// Turn 3: 7 + 2 = 9 cards (starting hand + 2 draws)
+// ...
+// Turn 8: 7 + 7 = 14 cards
+```
+
+From `DeckList.js:154`:
+```javascript
+<ProbCell
+    draws={7 + v}  // v ranges from 0 to 7
+    card={card}
+    deck={this.convertToList(this.props.deckList)}
+    calculating={this.state.calculating}
+/>
+```
+
+### Playability conditions
+
+For a card to be considered playable on a given turn, all conditions must be met:
+
+1. **Turn condition**: Enough turns have elapsed to generate the required mana
+   ```javascript
+   turnCondition = draws - startingHandSize >= convertedManaCost - 1
+   ```
+
+2. **Mana condition**: Enough total lands in deck to produce required mana
+   ```javascript
+   manaCondition = totalLands >= convertedManaCost
+   ```
+
+3. **Color condition**: Sufficient sources of each required color
+   ```javascript
+   colorCondition = all required colors can be produced by available lands
+   ```
+
+4. **Includes condition**: The card must be in the deck
+   ```javascript
+   includesCondition = deck.map(v => v.name).includes(card.name)
+   ```
+
+<Note>
+If any of these conditions fails, the calculator returns 0% probability for that card.
+</Note>
+
+## Real-time updates
+
+Probabilities recalculate automatically when:
+
+- You add or remove cards from your deck
+- You change the quantity of any card
+- You modify your mana base
+- The `calculating` state flag is toggled
+
+### Calculation trigger
+
+From `ProbabilityCell.js:44-50`:
+```javascript
+if (!this.props.card.type.includes('Land') && 
+    this.props.card.manaCost && 
+    this.props.calculating) {
+    this.setState({ P: 'loading' })
+    axios.post('api/alg', ({ 
+        draws: this.props.draws, 
+        card: this.props.card, 
+        deck: this.props.deck 
+    }))
+    .then(res => {
+        this.setState({ P: res.data })
+    });
+}
+```
+
+### Loading states
+
+While calculating, each cell displays:
+- A circular progress indicator
+- Color-coded spinner based on the card's primary color
+- The loading state prevents multiple simultaneous calculations
+
+<Warning>
+Calculations are performed asynchronously via API calls. For large decks, there may be a brief delay before all probabilities update.
+</Warning>
+
+## The API endpoint
+
+All probability calculations are handled by a backend API:
+
+### POST /api/alg
+
+**Request body:**
+```json
+{
+  "draws": 9,
+  "card": {
+    "name": "Lightning Bolt",
+    "manaCost": "{R}",
+    "type": "Instant",
+    ...
+  },
+  "deck": [
+    // Array of all cards in deck (expanded by quantity)
+  ]
+}
+```
+
+**Response:**
+```json
+0.678  // Probability as a decimal (67.8%)
+```
+
+From `Alg.js:5-11`:
+```javascript
+router.post('/', (req, res, next) => {
+  console.log('inside route', req.body.draws, req.body.card.name, req.body.deck.length)
+  const p = probabilityOfPlayingCard(req.body.draws, req.body.card, req.body.deck)
+  console.log('P',p)
+  res.status(200)
+  res.json(p)
+})
+```
+
+## When probabilities show empty
+
+Probability cells will be empty (showing only mana icons) for:
+
+### Land cards
+
+From `ProbabilityCell.js:38-42`:
+```javascript
+if (this.props.card.type.includes('Land')) {
+  let manapic = (this.props.card.ProducibleManaColors.includes('C') || 
+                 this.props.card.ProducibleManaColors.includes('F')) ? 
+                'Cmana.png' : 
+                (this.props.card.ProducibleManaColors.split(',').join('').slice(0, Math.min(this.props.card.ProducibleManaColors.length, 2)) + 'mana.png')
+  if (this.props.card.ProducibleManaColors.split(',').join('') === 'BGRUW') 
+    manapic = 'BGRUWmana.png'
+  this.setState({ manapic })
+}
+```
+
+Instead of percentages, lands display:
+- Single color lands: That color's mana symbol
+- Dual lands: Combined symbol (e.g., "UB" for Underground Sea)
+- Fetch lands: "F" indicator
+- Colorless lands: "C" symbol
+- Five-color lands: "BGRUW" symbol
+
+### Cards without mana costs
+
+From `ArithmaticHelpers.js:38`:
+```javascript
+if (card.type.includes('Land') || cardsDrawn > deck.length) return ''
+```
+
+Cards that don't have a defined `manaCost` property will not have probabilities calculated.
+
+## Calculation methodology
+
+The probability calculator uses hypergeometric distribution and Vandermonde's identity:
+
+1. **Parse card cost**: Convert mana cost string (e.g., "{2}{U}{U}") into structured requirements
+2. **Categorize mana sources**: Group lands by what colors they can produce
+3. **Handle fetch lands**: Account for lands that can search for specific land types
+4. **Generate hand combinations**: Calculate all possible hands that could play the card
+5. **Apply hypergeometric distribution**: Determine probability of drawing each viable hand
+6. **Aggregate probabilities**: Sum probabilities across all playable hand combinations
+
+<Accordion title="Technical details: Fetch land integration">
+Fetch lands are handled specially in the algorithm. When a fetch land is drawn, the calculator:
+
+1. Identifies which lands can be fetched based on `fetchOptions` (e.g., "Plains,Island")
+2. Determines what mana colors those fetchable lands produce
+3. Treats the fetch land as a virtual source of those colors
+4. Adjusts the card's effective mana cost to account for fetched mana
+5. Recalculates viable hand combinations with the fetch land's flexibility
+
+This approach ensures fetch lands are valued correctly for their color-fixing capabilities.
+</Accordion>
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Deck building" icon="layer-group" href="/features/deck-building">
+    Learn about the deck building interface
+  </Card>
+  <Card title="Mana optimization" icon="droplet" href="/features/mana-optimization">
+    Optimize your mana base for consistent casting
+  </Card>
+</CardGroup>

@@ -1,0 +1,213 @@
+---
+title: Hypergeometric distribution
+description: The mathematical foundation for calculating MTG deck probabilities
+---
+
+## What is hypergeometric distribution?
+
+Hypergeometric distribution is a probability distribution that describes the likelihood of drawing a specific number of success cards from a finite population without replacement. Unlike binomial distribution (which assumes replacement), hypergeometric distribution perfectly models the act of drawing cards from an MTG deck.
+
+### The key principle
+
+When you draw a card from your deck, you cannot draw that same card again. This "sampling without replacement" is exactly what hypergeometric distribution was designed to model, making it the ideal statistical tool for MTG probability calculations.
+
+## Why it's perfect for MTG
+
+Magic: The Gathering deck analysis has unique characteristics:
+
+- **Fixed population**: Your deck has exactly 60 cards (or 99 in Commander)
+- **No replacement**: Once you draw a card, it's no longer in your deck
+- **Known quantities**: You know exactly how many lands and spells are in your deck
+- **Specific outcomes**: You want to calculate the probability of drawing specific combinations (e.g., "3 lands by turn 3")
+
+These constraints make hypergeometric distribution the mathematically correct approach, as opposed to other probability methods that assume infinite populations or replacement.
+
+## The formula
+
+The hypergeometric probability formula is:
+
+```
+P(X = k) = [C(K, k) × C(N-K, n-k)] / C(N, n)
+```
+
+Where:
+- **N** = Total population size (deck size, typically 60)
+- **K** = Number of success states in population (e.g., number of lands in deck)
+- **n** = Number of draws (e.g., 7 cards for opening hand)
+- **k** = Number of observed successes (e.g., exactly 3 lands drawn)
+- **C(a, b)** = Binomial coefficient "a choose b" = a! / (b! × (a-b)!)
+
+### Breaking down each variable
+
+<Accordion title="N - Total deck size">
+  The total number of cards in your deck. For Standard and Modern, this is typically 60 cards. For Commander, it's 99 cards plus your commander.
+  
+  **Example**: If you have a 60-card deck, N = 60.
+</Accordion>
+
+<Accordion title="K - Success states in deck">
+  The total number of cards in your deck that meet your criteria. If you're calculating land probability, K is the number of lands in your deck.
+  
+  **Example**: If your deck has 24 lands, K = 24.
+</Accordion>
+
+<Accordion title="n - Number of draws">
+  How many cards you're drawing. For an opening hand, this is 7. For "by turn 3 on the play," this would be 9 (7 opening + 2 draw steps).
+  
+  **Example**: Opening hand is 7 cards, so n = 7.
+</Accordion>
+
+<Accordion title="k - Desired successes">
+  The specific number of success cards you want to draw. If you want exactly 3 lands, k = 3.
+  
+  **Example**: To have exactly 3 lands in your opening hand, k = 3.
+</Accordion>
+
+## Frank Karsten's pioneering work
+
+This implementation is based on the groundbreaking analysis by Frank Karsten, a Hall of Fame player and statistician. His ChannelFireball article "[How Many Colored Mana Sources Do You Need to Consistently Cast Your Spells?](https://www.channelfireball.com/articles/frank-analysis-how-many-colored-mana-sources-do-you-need-to-consistently-cast-your-spells/)" established the mathematical framework for modern MTG mana base construction.
+
+<Note>
+  Karsten's work showed that you need approximately 14 sources of a color to cast a 1-mana spell on turn 1 with 90% consistency, and 19 sources for a 2-mana spell on turn 2.
+</Note>
+
+## How it differs from other methods
+
+### vs. Binomial distribution
+
+**Binomial** assumes:
+- Infinite population (or replacement after each draw)
+- Each trial is independent
+
+**Hypergeometric** handles:
+- Finite population (your 60-card deck)
+- Dependent trials (drawing one card affects the next)
+
+### vs. Normal approximation
+
+**Normal approximation** is useful for:
+- Very large populations
+- Rough estimates
+
+**Hypergeometric** provides:
+- Exact probabilities
+- Accurate results for small populations like MTG decks
+
+### vs. Simulation (Monte Carlo)
+
+**Monte Carlo simulation**:
+- Approximate through repeated random trials
+- Computationally expensive
+- Requires many iterations for accuracy
+
+**Hypergeometric**:
+- Exact mathematical calculation
+- Computationally efficient
+- Single calculation provides precise probability
+
+## Visual examples
+
+### Example 1: Simple land calculation
+
+<CodeGroup>
+
+```text Deck composition
+Deck: 60 cards
+Lands: 24
+Spells: 36
+```
+
+```text Question
+"What's the probability of drawing exactly 3 lands
+in my opening hand of 7 cards?"
+```
+
+```text Calculation
+N = 60 (deck size)
+K = 24 (lands in deck)
+n = 7 (cards drawn)
+k = 3 (lands desired)
+
+P(X = 3) = [C(24, 3) × C(36, 4)] / C(60, 7)
+         = [2,024 × 58,905] / 386,206,920
+         ≈ 0.308 or 30.8%
+```
+
+</CodeGroup>
+
+### Example 2: Cumulative probability
+
+Often you don't want "exactly" 3 lands—you want "at least" 3 lands (or "at most" 4 lands).
+
+<CodeGroup>
+
+```text At least 3 lands
+P(X ≥ 3) = P(X = 3) + P(X = 4) + P(X = 5) + P(X = 6) + P(X = 7)
+```
+
+```text Between 2-4 lands
+P(2 ≤ X ≤ 4) = P(X = 2) + P(X = 3) + P(X = 4)
+```
+
+</CodeGroup>
+
+This is closer to real gameplay questions like "What's the chance I have a playable hand?"
+
+### Example 3: Multi-color analysis
+
+For colored mana sources, you need to consider:
+- How many sources produce the required color
+- Whether dual lands can satisfy multiple requirements
+- The converted mana cost needed by a certain turn
+
+<CodeGroup>
+
+```text Deck
+10 Island (produces {U})
+10 Mountain (produces {R})
+4 Steam Vents (produces {U} or {R})
+36 spells
+
+Card to cast: Lightning Bolt {R}
+```
+
+```text Calculation
+Sources that produce {R}:
+- 10 Mountain
+- 4 Steam Vents
+= 14 red sources total
+
+On turn 1 (7 cards drawn):
+P(at least 1 red source) = 1 - P(0 red sources)
+= 1 - [C(14, 0) × C(46, 7)] / C(60, 7)
+≈ 0.85 or 85%
+```
+
+</CodeGroup>
+
+<Tip>
+  The MTG Deck Builder calculator handles all these complex scenarios automatically, including fetch lands, dual lands, and multi-color requirements.
+</Tip>
+
+## Key takeaways
+
+1. **Hypergeometric distribution models MTG perfectly** because decks are finite populations with sampling without replacement
+
+2. **The formula calculates exact probabilities**, not approximations
+
+3. **Frank Karsten's work** established the gold standard for mana base analysis using this method
+
+4. **It's superior to other probability methods** for card games with finite, known deck compositions
+
+5. **The calculator implements this formula** to analyze every card in your deck against every possible hand combination
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="How it works" icon="gear" href="/algorithm/how-it-works">
+    Learn how the algorithm implements hypergeometric distribution
+  </Card>
+  <Card title="Examples" icon="code" href="/algorithm/examples">
+    See real-world examples with different deck types
+  </Card>
+</CardGroup>
