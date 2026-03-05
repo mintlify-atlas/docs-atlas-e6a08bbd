@@ -1,0 +1,69 @@
+{
+  "projectType": "saas",
+  "projectName": "MTG Deck Builder",
+  "projectDescription": "A Magic: The Gathering deck builder that uses hypergeometric distribution to calculate optimal mana probabilities for consistent gameplay.",
+  "theme": "almond",
+  "primaryColor": "#0b69f4",
+  "lightColor": "#f18039",
+  "darkColor": null,
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Features",
+        "pages": [
+          "features/deck-building",
+          "features/probability-calculator",
+          "features/mana-optimization"
+        ]
+      },
+      {
+        "group": "Algorithm",
+        "pages": [
+          "algorithm/hypergeometric-distribution",
+          "algorithm/how-it-works",
+          "algorithm/examples"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/overview",
+          "api/probability-endpoint"
+        ]
+      },
+      {
+        "group": "Development",
+        "pages": [
+          "development/setup",
+          "development/architecture",
+          "development/contributing"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Hypergeometric probability calculations for deck building",
+    "Real-time mana curve analysis",
+    "Interactive deck list management",
+    "MTG card database integration",
+    "Turn-by-turn playability predictions",
+    "Multi-color mana source optimization",
+    "Fetch land compatibility calculation"
+  ],
+  "publicApiSurface": [
+    "POST /api/alg - Calculate card probability",
+    "GET /api/card - Fetch card data",
+    "GET /api/mtg - MTG card search",
+    "probabilityOfPlayingCard(draws, card, deck)",
+    "cardPlayable(draws, card, deck)",
+    "hypergeometric(draws, cards)",
+    "parseHands(numCards, card, deck)"
+  ]
+}
